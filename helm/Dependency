@@ -1,0 +1,119 @@
+package main
+
+import (
+  "flag"
+  "fmt"
+  "io/ioutil"
+  "gopkg.in/yaml.v2"
+  "bytes"
+  "os/exec"
+  "strings"
+  
+)
+
+//Defining a struct to parse the yaml file
+type Digit struct {
+  Version float64 `yaml:"version"`
+  Modules []struct {
+    Name       string   `yaml:"name"`
+    Images     []string `yaml:"images"`
+    Dependency []string `yaml:"dependency,omitempty"`
+  } `yaml:"modules"`
+}
+
+type Set struct {
+  set map[string]bool
+}
+func NewSet() *Set {
+  return &Set{make(map[string]bool)}
+}
+func (set *Set) Add(i string) bool {
+  _, found := set.set[i]
+  set.set[i] = true
+  return !found //False if it existed already
+}
+func (set *Set) Get(i string) bool {
+  _, found := set.set[i]
+  return found
+}
+
+
+func main() {
+
+//Input the yaml file and the required service using flag
+  fmt.Println("Parsing YAML file")
+  var fileName string
+  flag.StringVar(&fileName, "f", "", "YAML file to parse.")
+  service := flag.String("s", "", "a string")
+  flag.Parse()
+  if fileName == "" {
+    fmt.Println("Please provide yaml file by using -f option")
+    return
+  }
+ 
+  
+//Decoding the yaml file and assigning the values to a map
+  yamlFile, err := ioutil.ReadFile(fileName)
+  if err != nil {
+    fmt.Printf("Error reading YAML file: %s\n", err)
+    return
+  }
+  digit := Digit{}
+  err = yaml.Unmarshal(yamlFile, &digit)
+  if err != nil {
+    fmt.Printf("Error parsing YAML file: %s\n", err)
+  }
+ 
+// Mapping the images to servicename
+  var m = make(map[string][]string)
+  set := NewSet()
+  for _, s := range digit.Modules {
+    m[s.Name] = s.Images
+  }
+//Checking dependency of service on core or buisness services etc.
+  for _, s := range digit.Modules {
+    if s.Name == *service {
+      fmt.Println(s)
+      for _, img := range s.Images {
+        set.Add(img)
+      }
+      if s.Dependency != nil {
+        for _, deps := range s.Dependency {
+          for _, img := range m[deps] {
+            set.Add(img)      //Put array of images into the set
+          }
+        }
+      }
+    }
+  }
+  
+  
+   str:= fmt.Sprintf("%v", set)
+  
+  fmt.Println(str)
+	parts := strings.Fields("go run main.go deploy -e dev -p egov-mdms-service:str")
+	
+	fmt.Println(parts)
+
+	//	The first part is the command, the rest are the args:
+	head := parts[0]
+	args := parts[1:len(parts)]
+
+	//	Format the command
+	cmd := exec.Command(head, args...)
+	/*for _, arg := range cmd.Args {
+			fmt.Printf("Result: %v\n", arg)
+		}*/
+
+	//capture stdout and stderr:
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &stderr
+
+	//	Run the command
+	cmd.Run()
+
+	fmt.Printf("Result: %v / %v", out.String(), stderr.String())
+
+}
